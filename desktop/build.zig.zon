@@ -1,0 +1,10 @@
+.{
+    .name = .fx_desktop,
+    .version = "0.0.0",
+    .fingerprint = 0x6c03463c0e5dc842,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        .nanoui = .{ .path = "../../nanoui" },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src" },
+}
