@@ -199,7 +199,13 @@ pub fn view(s: *State, c: *ui.Context) void {
     if (snap.changes.items.len == 0) {
         const clean = ui.div(c).column().wFull().grow().center().gap(14).pb(80);
         defer clean.end();
-        @import("icons.zig").draw(c, "check", 20, t.green_900);
+        // A 40pt circular badge around the check (design's clean_view).
+        {
+            const badge = ui.div(c).size(40, 40).rounded(20).bg(t.gray_100)
+                .border(t.alpha_300).borderW(1).center();
+            defer badge.end();
+            @import("icons.zig").draw(c, "check", 18, t.green_900);
+        }
         ui.text(c, "Nothing to commit", .{ .size = 14, .weight = .medium, .color = t.gray_1000 });
         const branch = c.print("The working tree matches {s}.", .{snap.branch});
         ui.text(c, branch, w.faint(13, 18));

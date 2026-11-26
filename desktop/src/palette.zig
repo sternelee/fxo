@@ -288,7 +288,11 @@ pub const Palette = struct {
         }
 
         {
-            const foot = ui.div(c).row().wFull().h(40).px(16).gap(16).itemsCenter().bg(t.background_200);
+            // The footer is separated by a hairline (design's palette_footer).
+            const rule2 = ui.div(c).wFull().h(1).bg(t.alpha_400);
+            rule2.end();
+            const foot = ui.div(c).row().wFull().h(40).px(16).gap(16).itemsCenter()
+                .bg(t.background_200);
             defer foot.end();
             ui.text(c, "↑↓ Navigate", .{ .size = 12, .color = t.gray_900 });
             ui.text(c, "⏎ Run", .{ .size = 12, .color = t.gray_900 });
