@@ -97,6 +97,8 @@ pub const State = struct {
     mcp_address: ui.TextBuffer = .{},
     /// Why the last add attempt failed, shown under the form.
     mcp_add_error: ?[]const u8 = null,
+    /// Which MCP server's overflow menu is open.
+    mcp_menu: ?usize = null,
     /// The workspace's AGENTS.md, loaded when the Behaviour page opens and
     /// written back as it is edited (design's instructions field).
     instructions: @import("nanoui").ui.TextBuffer = .{},
@@ -134,6 +136,8 @@ pub const State = struct {
     model_query: ui.TextBuffer = .{},
     /// The skills page's filter query.
     skill_filter: ui.TextBuffer = .{},
+    /// When true the Skills page shows every skill instead of four per group.
+    skills_all: bool = false,
     /// The composer attach menu, when open.
     attach_menu: bool = false,
     /// The usage page's period: "today", "7d" or "month".
@@ -534,6 +538,30 @@ pub const State = struct {
 
     /// Registers an MCP server with fx (`fx mcp add NAME URL`), then reloads
     /// the list so the new row appears.
+    /// Runs an MCP command (`fx mcp <verb> NAME`) and refreshes the list.
+    pub fn runMcpCommand(s: *State, verb: []const u8, name: []const u8) void {
+        const fxcli = @import("fxcli.zig");
+        _ = fxcli.mcpCommand(s.alloc, verb, name);
+        s.mcp_menu = null;
+        fxcli.gather(s.alloc, &s.fx_info);
+    }
+
+    /// Runs an fx command in the user's Terminal app, the way fx-ui's
+    /// in_terminal helper does for Update fx and similar actions.
+    pub fn runInTerminal(command: []const u8) void {
+        const script = std.fmt.allocPrint(std.heap.c_allocator, "tell application \"Terminal\"\n activate\n do script \"fx {s}\"\nend tell", .{command}) catch return;
+        defer std.heap.c_allocator.free(script);
+        const io = @import("proc.zig").io();
+        var child = std.process.spawn(io, .{
+            .argv = &.{ "osascript", "-e", script },
+            .stdin = .inherit,
+            .stdout = .inherit,
+            .stderr = .inherit,
+        }) catch return;
+        // Let osascript finish handing the command to Terminal.
+        _ = child.wait(io) catch {};
+    }
+
     pub fn addMcpServer(s: *State) void {
         const name = std.mem.trim(u8, s.mcp_name.text(), " \t\r\n");
         const address = std.mem.trim(u8, s.mcp_address.text(), " \t\r\n");

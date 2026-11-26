@@ -321,6 +321,13 @@ pub fn addWorkspaceDir(alloc: std.mem.Allocator, path: []const u8) bool {
 
 /// Registers an MCP server by name and address (`fx mcp add NAME URL`).
 /// Returns true when fx accepted it.
+/// Runs `fx mcp <verb> NAME` (check/remove/reject/login/logout).
+pub fn mcpCommand(alloc: std.mem.Allocator, verb: []const u8, name: []const u8) bool {
+    const out = run(alloc, &.{ "fx", "mcp", verb, name }) orelse return false;
+    defer alloc.free(out);
+    return std.mem.indexOf(u8, out, "error") == null;
+}
+
 pub fn addMcpServer(alloc: std.mem.Allocator, name: []const u8, address: []const u8) bool {
     const out = run(alloc, &.{ "fx", "mcp", "add", name, address }) orelse return false;
     defer alloc.free(out);

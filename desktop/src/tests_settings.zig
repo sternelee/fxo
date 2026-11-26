@@ -82,12 +82,16 @@ test "skills page lists skills with a filter and Open buttons" {
     s.fx_info.skills.items[1].source.set(".fx");
     s.fx_info.skills.items[1].path.set("/example/.fx/skills/pdf");
     s.fx_info.skill_count = 2;
+    // Keep the skills out of the workspace so they land in the Yours group.
+    if (s.workspaces.items.len > 0) s.workspaces.items[0].path = "/workspace/other";
 
     var t: ui.Tester = undefined;
     try t.init(alloc, .init(&s, view.view), .{ .width = 1120, .height = 760, .dark = true });
     defer t.deinit();
     t.settle(0.2);
-    try std.testing.expect(t.hasText("Available"));
+    // The design groups skills into This project / Yours, each with a
+    // counted header showing the harness folder.
+    try std.testing.expect(t.hasText("Yours"));
     try std.testing.expect(t.hasText("/technical-writer"));
     try std.testing.expect(t.hasText("Write and edit prose"));
     try std.testing.expect(t.hasText("/pdf"));
@@ -321,4 +325,111 @@ test "the behaviour page carries the instructions field" {
     try std.testing.expect(t.hasText("Instructions"));
     try std.testing.expect(t.hasText("Prefer small diffs."));
     try std.testing.expect(t.hasText("Added to every new session, after fx's own instructions."));
+}
+
+test "skills fold to four per group until Show more" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    var s = fixture(alloc);
+    s.page = .settings;
+    s.settings_section = .skills;
+    s.fx_info.loaded = true;
+    for (0..6) |i| {
+        try s.fx_info.skills.append(alloc, .{});
+        const sk = &s.fx_info.skills.items[i];
+        sk.name.set(std.fmt.allocPrint(alloc, "skill-{d}", .{i}) catch "");
+        sk.description.set("A skill");
+        sk.source.set(".claude");
+        sk.path.set(std.fmt.allocPrint(alloc, "/home/example/.claude/skills/skill-{d}", .{i}) catch "");
+    }
+    s.fx_info.skill_count = 6;
+
+    var t: ui.Tester = undefined;
+    try t.init(alloc, .init(&s, view.view), .{ .width = 1120, .height = 760, .dark = true });
+    defer t.deinit();
+    t.settle(0.2);
+    try std.testing.expect(t.hasText("Yours"));
+    try std.testing.expect(t.hasText("Show 2 more"));
+    try std.testing.expect(t.hasText("6"));
+    // Clicking Show more reveals every skill.
+    try t.clickText("Show 2 more");
+    t.settle(0.2);
+    try std.testing.expect(s.skills_all);
+    try std.testing.expect(t.hasText("/skill-5"));
+}
+
+test "about hero shows the fx version and channel line" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    var s = fixture(alloc);
+    s.page = .settings;
+    s.settings_section = .about;
+    s.fx_info.loaded = true;
+    s.fx_info.doctor_version.set("0.0.18");
+    s.fx_info.channel.set("stable");
+    s.fx_info.build.set("6196071b3c1b");
+
+    var t: ui.Tester = undefined;
+    try t.init(alloc, .init(&s, view.view), .{ .width = 1120, .height = 760, .dark = true });
+    defer t.deinit();
+    t.settle(0.2);
+    try std.testing.expect(t.hasText("fx 0.0.18"));
+    try std.testing.expect(t.containsText("Stable channel"));
+    try std.testing.expect(t.containsText("build 6196071"));
+    try std.testing.expect(t.containsText("desktop 0.0.17"));
+    try std.testing.expect(t.hasText("Update fx"));
+}
+
+test "an mcp row has an overflow menu" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    var s = fixture(alloc);
+    s.page = .settings;
+    s.settings_section = .mcp;
+    s.fx_info.loaded = true;
+    s.fx_info.servers[0].name.set("nanomcp");
+    s.fx_info.servers[0].status.set("ready");
+    s.fx_info.servers[0].address.set("http://127.0.0.1:7331/mcp");
+    s.fx_info.server_count = 1;
+
+    var t: ui.Tester = undefined;
+    try t.init(alloc, .init(&s, view.view), .{ .width = 1120, .height = 760, .dark = true });
+    defer t.deinit();
+    t.settle(0.2);
+    try std.testing.expect(t.hasText("nanomcp"));
+    // Opening the overflow menu shows Check now and Remove.
+    s.mcp_menu = 0;
+    s.menu_anchor = .{ .x = 900, .y = 300 };
+    t.settle(0.2);
+    try std.testing.expect(t.hasText("Check now"));
+    try std.testing.expect(t.hasText("Remove"));
+}
+
+test "behaviour rows keep labels left and controls right" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    var s = fixture(alloc);
+    s.page = .settings;
+    s.settings_section = .behaviour;
+    s.fx_info.loaded = true;
+    s.instructions_loaded = true;
+    s.instructions.set("Prefer small diffs.");
+
+    var t: ui.Tester = undefined;
+    try t.init(alloc, .init(&s, view.view), .{ .width = 1120, .height = 760, .dark = true });
+    defer t.deinit();
+    t.settle(0.2);
+    // All three labels render; the toggles sit in their own trailing slots
+    // and the instructions area carries an inset.
+    try std.testing.expect(t.hasText("Fast mode"));
+    try std.testing.expect(t.hasText("Notify me"));
+    try std.testing.expect(t.hasText("Instructions"));
+    try std.testing.expect(t.hasText("Prefer small diffs."));
+    // The toggles render as controls in the trailing slot of each row.
+    try std.testing.expect(t.hasText("Fast mode"));
+    try std.testing.expect(t.hasText("Quicker answers on models that offer it"));
 }

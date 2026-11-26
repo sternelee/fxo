@@ -199,7 +199,7 @@ fn installPage(s: *State, c: *ui.Context) void {
 /// The first-run page: no workspace yet, so offer the two setup steps
 /// (design's render_first_run).
 fn firstRunPage(s: *State, c: *ui.Context) void {
-    art.view(c, 10);
+    art.view(c, 10, false);
     ui.text(c, "Welcome to fx", .{ .size = 28, .line_height = 36, .weight = .medium, .color = t.gray_1000 });
 
     const card = ui.div(c).column().wFull().maxW(520).rounded(14)
@@ -329,7 +329,7 @@ pub fn view(s: *State, c: *ui.Context) void {
     const col = ui.div(c).column().grow().wFull().itemsCenter().gap(28).px(40).pt(120).scrollY();
     defer col.end();
 
-    art.view(c, 10);
+    art.view(c, 10, false);
     // No workspace yet: the first-run setup page.
     if (s.workspaces.items.len == 0) {
         firstRunPage(s, c);

@@ -7,6 +7,8 @@ const w = @import("widgets.zig");
 const icons = @import("icons.zig");
 const shell = @import("settings.zig");
 const State = @import("state.zig").State;
+/// Mirrors CARGO_PKG_VERSION in fx-ui's about hero.
+const desktop_version = "0.0.17";
 const fxcli = @import("fxcli.zig");
 
 fn gap(c: *ui.Context, amount: f32) void {
@@ -153,13 +155,21 @@ pub fn behaviour(s: *State, c: *ui.Context) void {
         // Fast mode toggle, written to fx's global fast_mode default.
         const fast = ui.div(c).row().wFull().gap(12).itemsCenter().px(16).py(14);
         defer fast.end();
-        const fcol = ui.div(c).column().grow().gap(2);
-        defer fcol.end();
-        ui.text(c, "Fast mode", .{ .size = 14, .line_height = 20, .color = t.gray_1000 });
-        ui.text(c, "Quicker answers on models that offer it", w.faint(13, 18));
-        if (shell.toggle(c, "settings-fast", s.fast_mode)) {
-            s.fast_mode = !s.fast_mode;
-            State.setConfigDefault("fast_mode", if (s.fast_mode) "true" else "false");
+        {
+            // The label column takes the slack so the switch sits at the
+            // right edge (design's row with a trailing control).
+            const fcol = ui.div(c).column().grow().gap(2);
+            defer fcol.end();
+            ui.text(c, "Fast mode", .{ .size = 14, .line_height = 20, .color = t.gray_1000 });
+            ui.text(c, "Quicker answers on models that offer it", w.faint(13, 18));
+        }
+        {
+            const trailing = ui.div(c).row().itemsCenter();
+            defer trailing.end();
+            if (shell.toggle(c, "settings-fast", s.fast_mode)) {
+                s.fast_mode = !s.fast_mode;
+                State.setConfigDefault("fast_mode", if (s.fast_mode) "true" else "false");
+            }
         }
         shell.separator(c);
         // Notifications: one row with its switch (design's notify_row).
@@ -172,7 +182,11 @@ pub fn behaviour(s: *State, c: *ui.Context) void {
                 ui.text(c, "Notify me", .{ .size = 14, .line_height = 20, .color = t.gray_1000 });
                 ui.text(c, "When a turn needs you or finishes in the background", w.faint(13, 18));
             }
-            if (shell.toggle(c, "settings-notify", !s.notify_muted)) s.notify_muted = !s.notify_muted;
+            {
+                const trailing = ui.div(c).row().itemsCenter();
+                defer trailing.end();
+                if (shell.toggle(c, "settings-notify", !s.notify_muted)) s.notify_muted = !s.notify_muted;
+            }
         }
     }
     // Instructions: the workspace's AGENTS.md, which fx reads into every
@@ -180,14 +194,16 @@ pub fn behaviour(s: *State, c: *ui.Context) void {
     shell.groupTitle(c, "Instructions");
     {
         const card = ui.div(c).column().wFull().gap(10).rounded(12).bg(t.gray_100)
-            .border(t.alpha_300).borderW(1).p(6);
+            .border(t.alpha_300).borderW(1).px(6).py(4);
         defer card.end();
+        // The area carries its own inset so the typed text does not touch the
+        // frame (design's instructions_field: px_6 py_4 around the textarea).
         const area = ui.textArea(c, &s.instructions, .{
             .width = .fill,
             .size = 13,
             .min_lines = 6,
             .max_lines = 14,
-            .bare = true,
+            .bare = false,
             .placeholder = "Notes fx should follow in this workspace",
             .color = t.gray_1000,
         });
@@ -388,14 +404,61 @@ pub fn mcp(s: *State, c: *ui.Context) void {
                     w.dot(c, mark.color);
                     ui.text(c, mark.label, .{ .size = 12, .line_height = 16, .color = t.gray_900 });
                 }
+                // Overflow menu: Check now / Sign out / Remove
+                // (design's mcp_overflow).
+                ui.key(c, c.print("mcp-menu-{d}", .{i}));
+                const dots = ui.div(c).size(24, 24).rounded(5).control().center().hover(t.alpha_200)
+                    .bg(if (s.mcp_menu != null and s.mcp_menu.? == i) t.alpha_300 else t.background_100);
+                defer dots.end();
+                @import("icons.zig").draw(c, "ellipsis", 16, t.gray_1000);
+                if (dots.clicked()) {
+                    if (c.rects.get(dots.id())) |r| {
+                        s.menu_anchor = .{ .x = r.x + r.w / 2, .y = r.y + r.h };
+                    }
+                    s.mcp_menu = if (s.mcp_menu != null and s.mcp_menu.? == i) null else i;
+                }
             }
         }
     }
+    // The menu floats above the rows so opening it never shifts the list.
+    if (s.mcp_menu) |mi| mcpMenu(s, c, mi);
+}
+
+fn mcpMenu(s: *State, c: *ui.Context, index: usize) void {
+    if (index >= s.fx_info.server_count) return;
+    const srv = &s.fx_info.servers[index];
+    const name = srv.name.slice();
+    const w_menu: f32 = 180;
+    const h_menu: f32 = 120;
+    const x = @max(8.0, @min(s.menu_anchor.x - w_menu / 2, c.size.w - w_menu - 8));
+    const y = @min(s.menu_anchor.y + 4, c.size.h - h_menu - 8);
+    const popup = ui.div(c).column().fixed().offset(x, y).w(w_menu).p(6).rounded(10).layer(12)
+        .bg(t.gray_100).border(t.alpha_400).borderW(1)
+        .shadow(.{ .color = .{ .a = 0.6 }, .blur = 24, .y = 12 });
+    defer popup.end();
+    if (mcpMenuItem(c, "mcp-check", "Check now", "search")) State.runMcpCommand(s, "check", name);
+    if (std.mem.eql(u8, srv.source.slice(), "remote")) {
+        if (mcpMenuItem(c, "mcp-logout", "Sign out", "user")) State.runMcpCommand(s, "logout", name);
+    }
+    const rule = ui.div(c).wFull().h(1).bg(t.alpha_200);
+    rule.end();
+    const remove_label = if (std.mem.eql(u8, srv.source.slice(), "project")) "Reject" else "Remove";
+    const verb: []const u8 = if (std.mem.eql(u8, srv.source.slice(), "project")) "reject" else "remove";
+    if (mcpMenuItem(c, "mcp-remove", remove_label, "trash")) State.runMcpCommand(s, verb, name);
+}
+
+fn mcpMenuItem(c: *ui.Context, id: []const u8, label: []const u8, icon_name: []const u8) bool {
+    ui.key(c, id);
+    const row = ui.div(c).row().wFull().h(32).px(8).gap(8).itemsCenter().rounded(6).control().hover(t.alpha_200);
+    defer row.end();
+    @import("icons.zig").draw(c, icon_name, 14, t.gray_900);
+    ui.text(c, label, .{ .size = 13, .line_height = 18, .color = t.gray_1000 });
+    return row.clicked();
 }
 
 pub fn skills(s: *State, c: *ui.Context) void {
     const info = &s.fx_info;
-    shell.pageTitle(c, "Skills", "Instructions fx loads when a request needs them.");
+    shell.pageTitle(c, "Skills", "Type / in the composer to use one. fx reads it before it starts.");
 
     // A filter field, like the design's skills_filter_field.
     {
@@ -403,50 +466,80 @@ pub fn skills(s: *State, c: *ui.Context) void {
             .bg(t.gray_100).border(t.alpha_300).borderW(1);
         defer box.end();
         @import("icons.zig").draw(c, "search", 14, t.gray_700);
-        _ = ui.textField(c, &s.skill_filter, .{ .placeholder = "Filter skills", .bare = true, .width = .fill, .size = 13 });
+        const field = ui.textField(c, &s.skill_filter, .{ .placeholder = "Filter skills", .bare = true, .width = .fill, .size = 13 });
+        if (field.changed) s.skills_all = false;
     }
 
     const query = std.mem.trim(u8, s.skill_filter.text(), " \t");
-    var shown: usize = 0;
-    for (info.skills.items[0..info.skill_count]) |skill| {
-        if (query.len > 0 and std.mem.indexOf(u8, skill.name.slice(), query) == null and
+    const root = if (s.workspaces.items.len > 0) s.workspaces.items[s.folder].path else "";
+    // The design splits skills into those under the workspace and the rest,
+    // and folds each group to four rows until "Show N more" is clicked.
+    var project: [128]usize = undefined;
+    var yours: [128]usize = undefined;
+    var project_n: usize = 0;
+    var yours_n: usize = 0;
+    for (info.skills.items[0..info.skill_count], 0..) |skill, i| {
+        if (query.len > 0 and
+            std.mem.indexOf(u8, skill.name.slice(), query) == null and
             std.mem.indexOf(u8, skill.description.slice(), query) == null) continue;
-        shown += 1;
+        const in_project = root.len > 0 and std.mem.startsWith(u8, skill.path.slice(), root);
+        if (in_project) {
+            if (project_n < project.len) {
+                project[project_n] = i;
+                project_n += 1;
+            }
+        } else if (yours_n < yours.len) {
+            yours[yours_n] = i;
+            yours_n += 1;
+        }
     }
+    const limit: usize = if (s.skills_all or query.len > 0) std.math.maxInt(usize) else 4;
 
-    // The counted header: title, the folder it came from, and the count.
+    if (project_n == 0 and yours_n == 0) {
+        if (query.len > 0) {
+            shell.row(c, "Nothing matches", c.print("No skill matches \"{s}\"", .{query}));
+        } else {
+            shell.row(c, "No skills found", "Add a SKILL.md under .fx/skills or ~/.fx/skills");
+        }
+        return;
+    }
+    if (project_n > 0) skillsGroup(c, s, "This project", project[0..project_n], limit, "skill-project");
+    if (yours_n > 0) skillsGroup(c, s, "Yours", yours[0..yours_n], limit, "skill-yours");
+}
+
+/// A counted header plus a card of skill rows, with a Show more footer
+/// (design's skills_group + skill_rows).
+fn skillsGroup(c: *ui.Context, s: *State, title: []const u8, ids: []const usize, limit: usize, key: []const u8) void {
+    gap(c, 8);
     {
         const head = ui.div(c).row().wFull().px(2).gap(8).itemsCenter();
         defer head.end();
-        ui.text(c, "Available", .{ .size = 13, .line_height = 18, .weight = .medium, .color = t.gray_1000 });
-        const folder = if (info.skill_count > 0 and info.skills.items[0].source.slice().len > 0)
-            c.print("~/{s}/skills", .{info.skills.items[0].source.slice()})
-        else
-            "~/.fx/skills";
-        ui.text(c, folder, .{ .size = 12, .line_height = 16, .mono = true, .family = t.mono_family, .color = t.gray_700 });
+        ui.text(c, title, .{ .size = 13, .weight = .medium, .color = t.gray_1000 });
+        const folder = if (ids.len > 0) s.fx_info.skills.items[ids[0]].source.slice() else "";
+        // source already carries its leading dot (".fx", ".claude").
+        const path = if (folder.len > 0) c.print("~/{s}/skills", .{folder}) else "";
+        ui.text(c, path, .{ .size = 12, .mono = true, .family = t.mono_family, .color = t.gray_700 });
         {
             const spacer = ui.div(c).grow();
             defer spacer.end();
         }
-        ui.text(c, c.print("{d}", .{shown}), .{ .size = 12, .line_height = 16, .color = t.gray_700 });
+        ui.text(c, c.print("{d}", .{ids.len}), .{ .size = 12, .color = t.gray_700 });
     }
-
     {
         const card = shell.cardStart(c);
         defer card.end();
-        if (info.skill_count == 0) {
-            shell.row(c, "No skills found", "Add a SKILL.md under .fx/skills or ~/.fx/skills");
-        } else if (shown == 0) {
-            shell.row(c, "Nothing matches", c.print("No skill matches \"{s}\"", .{query}));
-        } else {
-            var first = true;
-            for (info.skills.items[0..info.skill_count], 0..) |skill, i| {
-                if (query.len > 0 and std.mem.indexOf(u8, skill.name.slice(), query) == null and
-                    std.mem.indexOf(u8, skill.description.slice(), query) == null) continue;
-                if (!first) shell.separator(c);
-                first = false;
-                skillRow(c, skill, i);
-            }
+        const shown = @min(ids.len, limit);
+        for (ids[0..shown], 0..) |id, i| {
+            if (i > 0) shell.separator(c);
+            skillRow(c, s.fx_info.skills.items[id], i);
+        }
+        if (ids.len > shown) {
+            shell.separator(c);
+            ui.key(c, c.print("{s}-more", .{key}));
+            const more = ui.div(c).row().wFull().h(40).itemsCenter().justifyCenter().control().hover(t.alpha_200);
+            defer more.end();
+            ui.text(c, c.print("Show {d} more", .{ids.len - shown}), .{ .size = 13, .color = t.gray_900 });
+            if (more.clicked()) s.skills_all = true;
         }
     }
 }
@@ -615,15 +708,24 @@ fn tile(c: *ui.Context, label: []const u8, value: []const u8) void {
 pub fn about(s: *State, c: *ui.Context) void {
     const info = &s.fx_info;
     shell.pageTitle(c, "About", "fx desktop, built with Zig and nanoui.");
+    // The hero mirrors fx-ui's about_hero: the braille fx mark, the fx
+    // version, channel/build/desktop line, and the Update fx action.
     {
-        const hero = ui.div(c).row().wFull().gap(20).p(20).rounded(12).bg(t.gray_100).border(t.alpha_300).borderW(1);
+        const hero = ui.div(c).row().wFull().gap(20).p(20).rounded(12).bg(t.gray_100).border(t.alpha_300).borderW(1).itemsCenter();
         defer hero.end();
-        ui.text(c, "fx", .{ .size = 28, .weight = .medium, .color = t.gray_1000 });
+        @import("art.zig").view(c, 10, true);
         const col = ui.div(c).column().grow().gap(2);
         defer col.end();
         const version = if (info.doctor_version.slice().len > 0) info.doctor_version.slice() else "unknown";
         ui.text(c, c.print("fx {s}", .{version}), .{ .size = 20, .line_height = 26, .weight = .medium, .color = t.gray_1000 });
-        ui.text(c, "Native UI on nanoui, with fx embedded in-process", w.faint(13, 18));
+        const channel = if (info.channel.slice().len > 0) info.channel.slice() else "stable";
+        const channel_name = if (channel.len > 0) c.print("{c}{s}", .{ std.ascii.toUpper(channel[0]), channel[1..] }) else "Stable";
+        const build = info.build.slice();
+        const build_part = if (build.len > 0) c.print(" · build {s}", .{build[0..@min(7, build.len)]}) else "";
+        ui.text(c, c.print("{s} channel{s} · desktop {s}", .{ channel_name, build_part, desktop_version }), .{ .size = 13, .line_height = 18, .color = t.gray_900 });
+        if (w.button(c, "upgrade-fx", "Update fx", false)) {
+            State.runInTerminal("fx upgrade");
+        }
     }
     gap(c, 8);
     // Health: a "Run again" action plus each check fx doctor reported
