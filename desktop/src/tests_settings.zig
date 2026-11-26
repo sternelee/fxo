@@ -379,7 +379,8 @@ test "about hero shows the fx version and channel line" {
     try std.testing.expect(t.containsText("Stable channel"));
     try std.testing.expect(t.containsText("build 6196071"));
     try std.testing.expect(t.containsText("desktop 0.0.17"));
-    try std.testing.expect(t.hasText("Update fx"));
+    // The design's About hero has no Update action in this build.
+    try std.testing.expect(!t.hasText("Update fx"));
 }
 
 test "an mcp row has an overflow menu" {
@@ -432,4 +433,32 @@ test "behaviour rows keep labels left and controls right" {
     // The toggles render as controls in the trailing slot of each row.
     try std.testing.expect(t.hasText("Fast mode"));
     try std.testing.expect(t.hasText("Quicker answers on models that offer it"));
+}
+
+test "Fast mode and Notify me occupy separate rows" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    var s = fixture(alloc);
+    s.page = .settings;
+    s.settings_section = .behaviour;
+    s.fx_info.loaded = true;
+    s.instructions_loaded = true;
+
+    var t: ui.Tester = undefined;
+    try t.init(alloc, .init(&s, view.view), .{ .width = 1120, .height = 760, .dark = true });
+    defer t.deinit();
+    t.settle(0.2);
+    const fast = t.findText("Fast mode") orelse return error.TextNotFound;
+    const notify = t.findText("Notify me") orelse return error.TextNotFound;
+    // A shared row would put both labels at the same y. They must stack.
+    try std.testing.expect(notify.y > fast.y + 20);
+}
+
+test "doctor banner yields the fx version for the About hero" {
+    const fxcli_parse = @import("fxcli_parse.zig");
+    const fxcli = @import("fxcli.zig");
+    var info: fxcli.Info = .{};
+    fxcli_parse.parseDoctor(&info, "fx doctor  fx 0.0.18\n\n  Workspace    /example\n  Model        group/free\n");
+    try std.testing.expectEqualStrings("0.0.18", info.doctor_version.slice());
 }

@@ -36,6 +36,16 @@ pub fn parseDoctor(info: *Info, text: []const u8) void {
             info.doctor_version.set(line["[doctor] version=".len..]);
             continue;
         }
+        // fx prints "fx doctor  fx 0.0.18" as its banner; take the version
+        // there so the About hero does not fall back to "unknown".
+        if (std.mem.startsWith(u8, line, "fx doctor")) {
+            const tail = std.mem.trim(u8, line["fx doctor".len..], " \t");
+            if (std.mem.startsWith(u8, tail, "fx ")) {
+                const ver = std.mem.trim(u8, tail["fx ".len..], " \t");
+                if (ver.len > 0) info.doctor_version.set(ver);
+            }
+            continue;
+        }
         const level: Level = if (std.mem.startsWith(u8, line, "[ok]"))
             .ok
         else if (std.mem.startsWith(u8, line, "[warn]"))

@@ -153,22 +153,24 @@ pub fn behaviour(s: *State, c: *ui.Context) void {
         }
         shell.separator(c);
         // Fast mode toggle, written to fx's global fast_mode default.
-        const fast = ui.div(c).row().wFull().gap(12).itemsCenter().px(16).py(14);
-        defer fast.end();
+        // The row is scoped so its defer closes before the next row starts;
+        // otherwise the Notify row is nested inside it and shares its line.
         {
-            // The label column takes the slack so the switch sits at the
-            // right edge (design's row with a trailing control).
-            const fcol = ui.div(c).column().grow().gap(2);
-            defer fcol.end();
-            ui.text(c, "Fast mode", .{ .size = 14, .line_height = 20, .color = t.gray_1000 });
-            ui.text(c, "Quicker answers on models that offer it", w.faint(13, 18));
-        }
-        {
-            const trailing = ui.div(c).row().itemsCenter();
-            defer trailing.end();
-            if (shell.toggle(c, "settings-fast", s.fast_mode)) {
-                s.fast_mode = !s.fast_mode;
-                State.setConfigDefault("fast_mode", if (s.fast_mode) "true" else "false");
+            const fast = ui.div(c).row().wFull().gap(12).itemsCenter().px(16).py(14);
+            defer fast.end();
+            {
+                const fcol = ui.div(c).column().grow().gap(2);
+                defer fcol.end();
+                ui.text(c, "Fast mode", .{ .size = 14, .line_height = 20, .color = t.gray_1000 });
+                ui.text(c, "Quicker answers on models that offer it", w.faint(13, 18));
+            }
+            {
+                const trailing = ui.div(c).row().itemsCenter();
+                defer trailing.end();
+                if (shell.toggle(c, "settings-fast", s.fast_mode)) {
+                    s.fast_mode = !s.fast_mode;
+                    State.setConfigDefault("fast_mode", if (s.fast_mode) "true" else "false");
+                }
             }
         }
         shell.separator(c);
@@ -723,9 +725,6 @@ pub fn about(s: *State, c: *ui.Context) void {
         const build = info.build.slice();
         const build_part = if (build.len > 0) c.print(" · build {s}", .{build[0..@min(7, build.len)]}) else "";
         ui.text(c, c.print("{s} channel{s} · desktop {s}", .{ channel_name, build_part, desktop_version }), .{ .size = 13, .line_height = 18, .color = t.gray_900 });
-        if (w.button(c, "upgrade-fx", "Update fx", false)) {
-            State.runInTerminal("fx upgrade");
-        }
     }
     gap(c, 8);
     // Health: a "Run again" action plus each check fx doctor reported
