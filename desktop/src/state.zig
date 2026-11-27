@@ -592,8 +592,12 @@ pub const State = struct {
         if (picked) |paths| {
             if (paths.len == 0) return;
             const fxcli = @import("fxcli.zig");
-            _ = fxcli.addWorkspaceDir(s.alloc, paths[0]);
+            const cwd = s.workspacePath() orelse return;
+            if (!fxcli.addWorkspaceDir(s.alloc, cwd, paths[0])) return;
             fxcli.gather(s.alloc, &s.fx_info);
+            // Keep the background snapshot in step so it cannot replace the
+            // freshly read list with an older one on the next frame.
+            if (s.fx_loader) |loader| loader.request();
         }
     }
 

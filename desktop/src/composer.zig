@@ -176,12 +176,12 @@ pub fn view(s: *State, c: *ui.Context) void {
             .bg(t.background_100).border(t.alpha_400).borderW(1)
             .shadow(.{ .color = .{ .a = 0.6 }, .blur = 24, .y = 12 }).clip();
         defer pop.end();
-        if (@import("sidebar.zig").menuItem(c, "attach-file", "file", "Mention a file", "@")) {
+        if (@import("sidebar.zig").menuItem(c, "attach-file", "file", "Mention a file", "@", false)) {
             s.attach_menu = false;
             s.input.set("@");
             s.updatePicker();
         }
-        if (@import("sidebar.zig").menuItem(c, "attach-choose", "image", "Choose images…", "")) {
+        if (@import("sidebar.zig").menuItem(c, "attach-choose", "image", "Choose images…", "", false)) {
             s.attach_menu = false;
             const picked = @import("nanoui").dialog.open(s.alloc, .{
                 .title = "Attach images",
@@ -193,7 +193,7 @@ pub fn view(s: *State, c: *ui.Context) void {
             defer if (picked) |paths| @import("nanoui").dialog.freePaths(s.alloc, paths);
             if (picked) |paths| s.attachImages(paths);
         }
-        if (@import("sidebar.zig").menuItem(c, "attach-paste", "copy", "Paste image", "⌘V")) {
+        if (@import("sidebar.zig").menuItem(c, "attach-paste", "copy", "Paste image", "⌘V", false)) {
             s.attach_menu = false;
             s.status_line = "Paste an image with ⌘V";
         }

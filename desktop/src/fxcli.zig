@@ -292,9 +292,16 @@ pub fn parseWorkspace(info: *Info, root: std.json.Value) void {
     if (root.object.get("additional_directories")) |dirs| {
         if (dirs == .array) {
             for (dirs.array.items) |d| {
-                if (d != .string) continue;
+                // fx reports each entry as {"path": "...", "saved": true,
+                // "active": true, ...}, not as a bare string.
+                const path: ?[]const u8 = switch (d) {
+                    .string => |str| str,
+                    .object => strField(d.object, "path"),
+                    else => null,
+                };
+                if (path == null or path.?.len == 0) continue;
                 if (info.extra_count >= info.extra_dirs.len) break;
-                info.extra_dirs[info.extra_count].set(d.string);
+                info.extra_dirs[info.extra_count].set(path.?);
                 info.extra_count += 1;
             }
         }
@@ -303,8 +310,8 @@ pub fn parseWorkspace(info: *Info, root: std.json.Value) void {
 
 /// Persists an additional workspace directory for the current primary one.
 /// Returns true when fx accepted it.
-pub fn addWorkspaceDir(alloc: std.mem.Allocator, path: []const u8) bool {
-    const out = run(alloc, &.{ "fx", "workspace", "add", path }) orelse return false;
+pub fn addWorkspaceDir(alloc: std.mem.Allocator, cwd: []const u8, path: []const u8) bool {
+    const out = runIn(alloc, cwd, &.{ "fx", "workspace", "add", path }) orelse return false;
     defer alloc.free(out);
     // fx answers with JSON when it changed something; a refusal carries an
     // error line instead.
@@ -336,8 +343,11 @@ pub fn addMcpServer(alloc: std.mem.Allocator, name: []const u8, address: []const
         std.mem.indexOf(u8, out, "usage:") == null;
 }
 
-pub fn loadWorkspace(alloc: std.mem.Allocator, info: *Info) void {
-    if (run(alloc, &.{ "fx", "workspace", "list", "--json" })) |text| {
+pub fn loadWorkspace(alloc: std.mem.Allocator, info: *Info, cwd: ?[]const u8) void {
+    // status --json already gave us the opened workspace; fall back to it so
+    // a plain gather() reads the right project's extra directories too.
+    const dir = cwd orelse if (info.workspace.slice().len > 0) info.workspace.slice() else null;
+    if (runIn(alloc, dir, &.{ "fx", "workspace", "list", "--json" })) |text| {
         defer alloc.free(text);
         if (parseJson(alloc, text)) |p| {
             defer p.deinit();
@@ -404,7 +414,17 @@ pub fn loadModels(alloc: std.mem.Allocator, info: *Info) void {
 
 /// Parses `fx permissions` text output. Pure.
 fn run(alloc: std.mem.Allocator, argv: []const []const u8) ?[]u8 {
-    const result = std.process.run(alloc, @import("proc.zig").io(), .{ .argv = argv }) catch return null;
+    return runIn(alloc, null, argv);
+}
+
+/// Runs fx in a given directory. Workspace directories are stored per primary
+/// workspace, so `fx workspace add/list` must run in the opened project, not
+/// in the app process's own cwd.
+fn runIn(alloc: std.mem.Allocator, cwd: ?[]const u8, argv: []const []const u8) ?[]u8 {
+    const result = std.process.run(alloc, @import("proc.zig").io(), .{
+        .argv = argv,
+        .cwd = if (cwd) |dir| .{ .path = dir } else .inherit,
+    }) catch return null;
     alloc.free(result.stderr);
     return result.stdout;
 }
@@ -515,7 +535,7 @@ pub fn gatherPeriod(alloc: std.mem.Allocator, info: *Info, period: []const u8) v
         @import("fxcli_parse.zig").parseDoctor(info, text);
     }
     enrichMcp(alloc, info);
-    loadWorkspace(alloc, info);
+    loadWorkspace(alloc, info, null);
     loadModels(alloc, info);
     discoverSkills(alloc, info);
     info.loaded = true;

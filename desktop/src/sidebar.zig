@@ -189,14 +189,14 @@ pub fn rowMenu(s: *State, c: *ui.Context) void {
         .shadow(.{ .color = .{ .a = 0.6 }, .blur = 24, .y = 10 }).clip();
     defer card.end();
 
-    if (menuItem(c, "menu-rename", "pencil", "Rename", "")) {
+    if (menuItem(c, "menu-rename", "pencil", "Rename", "", false)) {
         s.active = m.si;
         s.page = .session;
         s.row_menu = null;
         s.openRename();
         return;
     }
-    if (menuItem(c, "menu-changes", "panel-right", "Show changes", "⌘\\")) {
+    if (menuItem(c, "menu-changes", "panel-right", "Show changes", "⌘\\", false)) {
         s.active = m.si;
         s.page = .session;
         s.row_menu = null;
@@ -206,14 +206,14 @@ pub fn rowMenu(s: *State, c: *ui.Context) void {
     // "Open beside" only makes sense for a session that is not already active.
     const already_active = s.page == .session and s.folder == m.ws and s.active == m.si;
     if (!already_active) {
-        if (menuItem(c, "menu-beside", "panel-split", "Open beside", "")) {
+        if (menuItem(c, "menu-beside", "panel-split", "Open beside", "", false)) {
             s.row_menu = null;
             s.openBeside(m.ws, m.si);
             return;
         }
     }
     if (session.id) |id| {
-        if (menuItem(c, "menu-copy", "copy", "Copy session id", "")) {
+        if (menuItem(c, "menu-copy", "copy", "Copy session id", "", false)) {
             c.clipboard.write(c.clipboard.ctx, id);
             s.row_menu = null;
             return;
@@ -223,7 +223,9 @@ pub fn rowMenu(s: *State, c: *ui.Context) void {
         const sep = ui.div(c).wFull().h(1).bg(t.alpha_200);
         sep.end();
     }
-    if (menuItem(c, "menu-remove", "trash", "Remove from list", "")) {
+    // The destructive item is red, icon and label (design's menu_item
+    // danger flag).
+    if (menuItem(c, "menu-remove", "trash", "Remove from list", "", true)) {
         s.active = m.si;
         s.page = .session;
         s.row_menu = null;
@@ -232,12 +234,13 @@ pub fn rowMenu(s: *State, c: *ui.Context) void {
     }
 }
 
-pub fn menuItem(c: *ui.Context, id: []const u8, icon_name: []const u8, label: []const u8, keys: []const u8) bool {
+pub fn menuItem(c: *ui.Context, id: []const u8, icon_name: []const u8, label: []const u8, keys: []const u8, danger: bool) bool {
     ui.key(c, id);
     const box = ui.div(c).row().wFull().h(30).px(8).gap(10).itemsCenter().rounded(6).control().hover(t.alpha_200);
     defer box.end();
-    @import("icons.zig").draw(c, icon_name, 14, t.gray_900);
-    ui.text(c, label, .{ .size = 13, .line_height = 18, .color = t.gray_1000 });
+    const color = if (danger) t.red_900 else t.gray_1000;
+    @import("icons.zig").draw(c, icon_name, 14, color);
+    ui.text(c, label, .{ .size = 13, .line_height = 18, .color = color });
     {
         const spacer = ui.div(c).grow();
         defer spacer.end();

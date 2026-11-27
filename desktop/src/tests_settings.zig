@@ -296,7 +296,7 @@ test "workspace json fills the primary directory and the extras" {
     const fxcli = @import("fxcli.zig");
     var info: fxcli.Info = .{};
     var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator,
-        \\{"kind":"workspace","action":"list","changed":false,"primary_directory":"/Users/example/project","saved_suppressed":false,"limit":16,"additional_directories":["/a","/b"]}
+        \\{"kind":"workspace","action":"list","changed":false,"primary_directory":"/Users/example/project","saved_suppressed":false,"limit":16,"additional_directories":[{"path":"/a","saved":true,"command_line":false,"available":true,"active":true},{"path":"/b","saved":true,"command_line":false,"available":true,"active":true}]}
     , .{});
     defer parsed.deinit();
     fxcli.parseWorkspace(&info, parsed.value);
@@ -461,4 +461,16 @@ test "doctor banner yields the fx version for the About hero" {
     var info: fxcli.Info = .{};
     fxcli_parse.parseDoctor(&info, "fx doctor  fx 0.0.18\n\n  Workspace    /example\n  Model        group/free\n");
     try std.testing.expectEqualStrings("0.0.18", info.doctor_version.slice());
+}
+
+test "real fx workspace list shape populates the extra folders" {
+    const fxcli = @import("fxcli.zig");
+    var info: fxcli.Info = .{};
+    var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator,
+        \\{"kind":"workspace","action":"list","changed":true,"primary_directory":"/Users/sternelee/www/github/fxo/desktop","saved_suppressed":false,"limit":16,"additional_directories":[{"path":"/Users/sternelee/www/github/spcat","saved":true,"command_line":false,"available":true,"active":true}]}
+    , .{});
+    defer parsed.deinit();
+    fxcli.parseWorkspace(&info, parsed.value);
+    try std.testing.expectEqual(@as(usize, 1), info.extra_count);
+    try std.testing.expectEqualStrings("/Users/sternelee/www/github/spcat", info.extra_dirs[0].slice());
 }
