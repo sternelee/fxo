@@ -12,9 +12,17 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    fx.addAnonymousImport("build_options", .{
-        .root_source_file = b.path("src/fx_build_options.zig"),
-    });
+    // The packaging scripts pass -Dversion so the bundle and fx's own build
+    // options agree on one version. Development builds keep the source default.
+    const version = b.option([]const u8, "version", "fx desktop's version (release builds)") orelse "";
+    const fx_options = b.addOptions();
+    fx_options.addOption([]const u8, "app_version", if (version.len > 0) version else "0.0.17");
+    fx_options.addOption([]const u8, "git_commit", "0000000000000000000000000000000000000000");
+    fx_options.addOption([]const u8, "update_channel", "stable");
+    fx_options.addOption([]const u8, "wasm_surface", "none");
+    fx_options.addOption(bool, "libfx", true);
+    fx_options.addOption(bool, "builtin_tools", true);
+    fx.addOptions("build_options", fx_options);
     // fx's session store is its own module with its own build options.
     const sm_options = b.addOptions();
     sm_options.addOption(bool, "hooks", false);
